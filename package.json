@@ -1,0 +1,25 @@
+{
+  "name": "ps33-emulator",
+  "version": "1.0.0",
+  "description": "A Teenage Engineering PO-33 K.O! inspired pocket sampler/sequencer for the browser, styled as a cartographic measuring instrument.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abrahammg/PS33-Emulator.git"
+  },
+  "keywords": [
+    "sampler",
+    "sequencer",
+    "web-audio",
+    "pocket-operator",
+    "po-33",
+    "music",
+    "synthesizer"
+  ],
+  "engines": {
+    "node": ">=14"
+  }
+}

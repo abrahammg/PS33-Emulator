@@ -20,6 +20,11 @@ you tap "calibrate".
 - **16-step sequencer × 16 patterns**, with patterns 01–04 preloaded as demo
   songs (boom-bap, four-on-the-floor techno, an ambient "field work" sketch,
   and a breakbeat).
+- **Song mode (pattern chaining)** — chain patterns into a longer arrangement.
+  The *CADENA* bar opens the chain editor: tap patterns to append them to the
+  route, tap a leg on the step ruler to remove it (up to 16 legs). Pressing play
+  runs the whole chain in a loop, showing the active pattern and position. The
+  factory chain (01→02→03→04) is loaded ready to play.
 - **Two performance modes** — *KIT* (each pad triggers its own sound) and
   *NOTA* (all 16 pads play the selected sound across a three-octave minor
   pentatonic scale, labeled in solfège).
@@ -83,6 +88,7 @@ the mark.
 | **ESCRITURA** | Write mode. Stopped: pads = steps, tap to place/remove the current sound. Playing: live-record pad hits |
 | **SONIDO** | Then tap a pad to select the active sound (01–16) |
 | **PATRÓN** | Then tap a pad to select the active pattern (01–16) |
+| **CADENA** | Song mode: tap pads to append patterns to the chain, tap a leg on the ruler to remove it; play runs the chain in a loop |
 | **KIT / NOTA** | Toggle pads between one-sound-per-pad and pentatonic scale of the selected sound |
 | **MICRÓFONO** | Arm sampling, then *hold* a pad to record into that slot (max 4 s) |
 | **PULSO − / +** | Tempo, 40–240 BPM |
@@ -93,7 +99,8 @@ the mark.
 ## How data is stored
 
 State is persisted in IndexedDB under the `ps33` database: one record for the
-song (all 16 patterns + tempo, saved with a short debounce after every edit)
+song (all 16 patterns + tempo + the pattern chain, saved with a short debounce
+after every edit)
 and one record per sampled slot (raw Float32 PCM plus its sample rate, so it
 survives across devices with different audio hardware). Clearing the site's
 data in your browser — or the factory-reset button — removes everything.

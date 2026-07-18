@@ -152,6 +152,12 @@
   }
   .tick.q{ border-color:var(--ink-soft); }
   .tick.now{ background:var(--accent); border-color:var(--accent); color:var(--paper); }
+  .tick.ctoken{
+    border-color:var(--ink-soft); color:var(--ink); font-weight:700; font-size:8px;
+    align-items:center; padding-top:0; cursor:pointer; background:var(--paper);
+  }
+  .tick.ctoken.act{ background:var(--accent); border-color:var(--accent); color:var(--paper); }
+  .tick.cempty{ opacity:.35; }
 
   /* ── controls ─────────────────────────────── */
   #controls{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
@@ -173,6 +179,22 @@
   button.on .lbl{ color:var(--paper); opacity:.7; }
   button.arm{ background:var(--accent); border-color:var(--accent); color:var(--paper); }
   button.arm .lbl{ color:var(--paper); opacity:.8; }
+
+  /* ── barra de cadena / canción ────────────── */
+  .chainbar{
+    width:100%; flex-direction:row; justify-content:space-between; align-items:center;
+    padding:8px 11px; gap:10px; min-height:34px;
+  }
+  .chainbar .ck{ font-size:10px; letter-spacing:2px; font-weight:700; flex:none; }
+  .chainbar .cv{
+    font-size:11px; letter-spacing:1px; color:var(--ink-soft); font-weight:700;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right;
+  }
+  .chainbar .cv i{ font-style:normal; }
+  .chainbar .cv i.act{ color:var(--accent); }
+  .chainbar .cv b{ font-weight:400; opacity:.45; margin:0 1px; }
+  .chainbar.on .cv{ color:var(--paper); }
+  .chainbar.on .cv i.act{ color:var(--paper); background:var(--accent); padding:0 3px; }
 
   /* ── pads ─────────────────────────────────── */
   #pads{
@@ -314,6 +336,11 @@
     <button id="bUp"><span class="sym">+</span><span class="lbl">PULSO +</span></button>
   </div>
 
+  <button id="bChain" class="chainbar">
+    <span class="ck">CADENA</span>
+    <span class="cv" id="chainView">—</span>
+  </button>
+
   <div id="pads"></div>
 
   <footer>
@@ -371,13 +398,16 @@ const NOTE_NAMES={0:'DO',3:'MI♭',5:'FA',7:'SOL',10:'SI♭'};
 let actx=null, master=null, analyser=null, buffers=new Array(16).fill(null);
 let playing=false, writeMode=false, padMode='kit';           // kit | nota
 let selectMode=null;                                          // null | 'sound' | 'pattern'
+let songMode=false;                                           // modo canción (cadena de patrones)
 let currentSlot=8, currentPat=0, bpm=112;
 let lastSemi=SLOTS.map(s=>s.type==='mel'?12:0);
 let step=0, uiStep=-1, nextNoteTime=0, schedTimer=null, stepQueue=[];
+let chainPos=0, uiPat=-1, uiChainPos=-1;                      // seguimiento de la cadena
 let lastOpenHat=null;
 let micArmed=false, micStream=null, mediaRec=null, recChunks=[], recPad=-1, recTimer=null, recT0=0;
 
 const patterns=Array.from({length:16},()=>Array.from({length:16},()=>[]));
+let chain=[0,1,2,3];   // canción por defecto: los 4 patrones de demostración encadenados
 
 /* patrones de demostración: [paso, sonido, semitono] */
 const DEMO={
@@ -404,6 +434,7 @@ for(const p in DEMO) for(const [st,sl,se] of DEMO[p]) patterns[p][st].push({s:sl
 
 /* estado de fábrica, para RESTABLECER */
 const INITIAL_PATTERNS=JSON.parse(JSON.stringify(patterns));
+const INITIAL_CHAIN=chain.slice();
 const SLOTS_ORIG=SLOTS.map(s=>({...s}));
 
 /* ═══════════ archivo local (IndexedDB) ═══════════ */
@@ -430,7 +461,7 @@ let saveTimer=null;
 function saveSong(){
   clearTimeout(saveTimer);
   saveTimer=setTimeout(()=>{
-    idbSet('cancion',{patterns:JSON.parse(JSON.stringify(patterns)),bpm}).catch(()=>{});
+    idbSet('cancion',{patterns:JSON.parse(JSON.stringify(patterns)),bpm,chain:chain.slice()}).catch(()=>{});
   },400);
 }
 async function saveSample(slot){
@@ -449,6 +480,7 @@ async function loadState(){
       for(let p=0;p<16;p++) for(let s=0;s<16;s++)
         patterns[p][s]=(song.patterns[p][s]||[]).map(e=>({s:e.s|0,n:e.n|0}));
       if(song.bpm>=40 && song.bpm<=240) bpm=song.bpm;
+      if(Array.isArray(song.chain)) chain=song.chain.filter(x=>Number.isInteger(x)&&x>=0&&x<16).slice(0,16);
     }
     for(let i=0;i<16;i++){
       const m=await idbGet('muestra:'+i);
@@ -622,33 +654,40 @@ function trigger(slot,semi,when){
 
 /* ═══════════ secuenciador ═══════════ */
 function stepDur(){ return 60/bpm/4; }
+function songActive(){ return songMode && chain.length>0; }
 function schedule(){
   while(nextNoteTime < actx.currentTime+0.12){
-    for(const ev of patterns[currentPat][step]) trigger(ev.s,ev.n,nextNoteTime);
-    stepQueue.push({step,time:nextNoteTime});
+    const p = songActive() ? chain[chainPos] : currentPat;
+    for(const ev of patterns[p][step]) trigger(ev.s,ev.n,nextNoteTime);
+    stepQueue.push({step,time:nextNoteTime,pat:p,cpos:chainPos});
     nextNoteTime+=stepDur();
     step=(step+1)%16;
+    if(step===0 && songActive()) chainPos=(chainPos+1)%chain.length;
   }
 }
+function nowPlayingMsg(){
+  return songActive()
+    ? 'CANCIÓN EN MARCHA — '+chain.length+' TRAMOS'
+    : 'EN MARCHA — PATRÓN '+pad2(currentPat+1);
+}
 function startPlay(){
-  playing=true; step=0; uiStep=-1; stepQueue.length=0;
+  playing=true; step=0; chainPos=0; uiStep=-1; uiChainPos=-1; stepQueue.length=0;
   nextNoteTime=actx.currentTime+0.06;
   schedTimer=setInterval(schedule,25);
   ui.bPlay.classList.add('on'); ui.bPlay.querySelector('.sym').innerHTML=ICON.stop;
-  setMsg('EN MARCHA — PATRÓN '+pad2(currentPat+1));
+  setMsg(nowPlayingMsg());
 }
 function stopPlay(){
-  playing=false; clearInterval(schedTimer); stepQueue.length=0; uiStep=-1;
+  playing=false; clearInterval(schedTimer); stepQueue.length=0; uiStep=-1; uiPat=-1; uiChainPos=-1;
   ui.bPlay.classList.remove('on'); ui.bPlay.querySelector('.sym').innerHTML=ICON.play;
   ui.statusPos.textContent='PASO —/16';
-  document.querySelectorAll('.tick.now').forEach(t=>t.classList.remove('now'));
-  setMsg('APARATO EN REPOSO'); renderPads();
+  setMsg('APARATO EN REPOSO'); renderRuler(); renderChainView(); renderPads();
 }
 
 /* ═══════════ interfaz ═══════════ */
 const ui={};
 ['scope','statusMsg','statusPos','roMode','roSound','roPat','roBpm','recDot',
- 'bPlay','bWrite','bSound','bPat','bMode','bRec','bDown','bUp','clearBtn','resetBtn','bFs']
+ 'bPlay','bWrite','bSound','bPat','bMode','bRec','bDown','bUp','clearBtn','resetBtn','bFs','bChain','chainView']
  .forEach(id=>ui[id]=document.getElementById(id));
 const padsEl=document.getElementById('pads');
 const rulerEl=document.getElementById('ruler');
@@ -667,14 +706,21 @@ function setMsg(m,acc){
 }
 function flashMsg(m,acc){
   setMsg(m,acc);
-  msgTimer=setTimeout(()=>setMsg(playing?'EN MARCHA — PATRÓN '+pad2(currentPat+1):'APARATO EN REPOSO'),2200);
+  msgTimer=setTimeout(()=>setMsg(playing?nowPlayingMsg():'APARATO EN REPOSO'),2200);
 }
 
 for(let i=0;i<16;i++){
   const t=document.createElement('div');
-  t.className='tick'+(i%4===0?' q':'');
-  t.textContent=(i%4===0)?(i+1):'';
+  t.className='tick';
   rulerEl.appendChild(t); tickEls.push(t);
+  t.addEventListener('click',()=>{
+    if(songMode && i<chain.length){
+      chain.splice(i,1);
+      if(chainPos>=chain.length) chainPos=0;
+      saveSong(); renderRuler(); renderChainView(); renderReadouts(); renderPads();
+      flashMsg(chain.length?('CADENA: '+chain.length+' TRAMOS'):'CADENA VACÍA — TOQUE PATRONES');
+    }
+  });
 
   const p=document.createElement('div');
   p.className='pad';
@@ -703,18 +749,51 @@ const ICON={
 const ICON_MAP={bPlay:'play',bWrite:'write',bSound:'sound',bPat:'pattern',bMode:'note',bRec:'mic',bDown:'minus',bUp:'plus',bFs:'fs'};
 for(const id in ICON_MAP) ui[id].querySelector('.sym').innerHTML=ICON[ICON_MAP[id]];
 
+function renderRuler(){
+  for(let i=0;i<16;i++){
+    const t=tickEls[i]; t.className='tick';
+    if(songMode){
+      if(i<chain.length){
+        t.classList.add('ctoken');
+        t.textContent=pad2(chain[i]+1);
+        if(playing && i===uiChainPos) t.classList.add('act');
+      }else{ t.classList.add('cempty'); t.textContent=''; }
+    }else{
+      if(i%4===0){ t.classList.add('q'); t.textContent=i+1; } else t.textContent='';
+      if(playing && i===uiStep) t.classList.add('now');
+    }
+  }
+}
+function renderChainView(){
+  if(!chain.length){
+    ui.chainView.textContent = songMode?'TOQUE PATRONES →':'—';
+    return;
+  }
+  ui.chainView.innerHTML = chain.map((p,idx)=>{
+    const act = playing && songMode && idx===uiChainPos;
+    return '<i'+(act?' class="act"':'')+'>'+pad2(p+1)+'</i>';
+  }).join('<b>·</b>');
+}
 function renderReadouts(){
-  ui.roMode.textContent = selectMode==='sound'?'SEL·SON' : selectMode==='pattern'?'SEL·PAT'
+  ui.roMode.textContent = songMode?'CANCIÓN'
+    : selectMode==='sound'?'SEL·SON' : selectMode==='pattern'?'SEL·PAT'
     : writeMode?'ESCRIT.' : (padMode==='kit'?'KIT':'NOTA');
   ui.roSound.innerHTML = pad2(currentSlot+1)+' <small>'+SLOTS[currentSlot].abbr+'</small>';
-  ui.roPat.textContent = pad2(currentPat+1);
+  if(songMode) ui.roPat.innerHTML = chain.length?('<small>CADENA</small>'+chain.length+' TR'):'—';
+  else ui.roPat.textContent = pad2(currentPat+1);
   ui.roBpm.textContent = bpm;
 }
 function renderPads(){
   for(let i=0;i<16;i++){
     const p=padEls[i], lab=p.querySelector('.lab'), tag=p.querySelector('.tag');
     p.classList.remove('filled','sel','now');
-    if(selectMode==='sound'){
+    if(songMode){
+      const n=chain.filter(x=>x===i).length;
+      lab.innerHTML='P'+pad2(i+1)+'<small>'+(patterns[i].some(s=>s.length)?'OCUPADO':'VACÍO')+'</small>';
+      tag.textContent=n?('×'+n):'';
+      if(n) p.classList.add('filled');
+      if(playing && i===uiPat) p.classList.add('now');
+    }else if(selectMode==='sound'){
       lab.innerHTML=SLOTS[i].abbr+'<small>'+SLOTS[i].name+'</small>';
       tag.textContent=SLOTS[i].type==='mel'?'~':'•';
       if(i===currentSlot) p.classList.add('sel');
@@ -755,6 +834,13 @@ function padDown(i,p){
   if(!actx) return;
   if(micArmed){ startCapture(i,p); return; }
 
+  if(songMode){
+    if(chain.length>=16){ flashMsg('CADENA COMPLETA (MÁX 16 TRAMOS)',true); return; }
+    chain.push(i); if(chainPos>=chain.length) chainPos=0;
+    saveSong(); flashPad(p);
+    flashMsg('AÑADIDO P'+pad2(i+1)+' · TRAMO '+chain.length,true);
+    renderRuler(); renderChainView(); renderReadouts(); renderPads(); return;
+  }
   if(selectMode==='sound'){
     currentSlot=i;
     trigger(i,SLOTS[i].type==='mel'?12:0,actx.currentTime);
@@ -852,28 +938,50 @@ async function finishCapture(){
 
 /* ═══════════ controles ═══════════ */
 ui.bPlay.addEventListener('click',()=>{ if(!actx)return; playing?stopPlay():startPlay(); renderReadouts(); renderPads(); });
+function exitSong(){
+  if(!songMode) return;
+  songMode=false; ui.bChain.classList.remove('on'); renderRuler(); renderChainView();
+}
 ui.bWrite.addEventListener('click',()=>{
+  exitSong();
   writeMode=!writeMode; ui.bWrite.classList.toggle('on',writeMode);
   selectMode=null; ui.bSound.classList.remove('on'); ui.bPat.classList.remove('on');
   flashMsg(writeMode?'ESCRITURA: PULSADOR = PASO':'ESCRITURA CERRADA');
   renderReadouts(); renderPads();
 });
 ui.bSound.addEventListener('click',()=>{
+  exitSong();
   selectMode=selectMode==='sound'?null:'sound';
   ui.bSound.classList.toggle('on',selectMode==='sound'); ui.bPat.classList.remove('on');
   if(selectMode==='sound') setMsg('ELIJA SONIDO 01–16',true);
   renderReadouts(); renderPads();
 });
 ui.bPat.addEventListener('click',()=>{
+  exitSong();
   selectMode=selectMode==='pattern'?null:'pattern';
   ui.bPat.classList.toggle('on',selectMode==='pattern'); ui.bSound.classList.remove('on');
   if(selectMode==='pattern') setMsg('ELIJA PATRÓN 01–16',true);
   renderReadouts(); renderPads();
 });
 ui.bMode.addEventListener('click',()=>{
+  exitSong();
   padMode=padMode==='kit'?'nota':'kit';
   flashMsg(padMode==='kit'?'MODO KIT: 16 SONIDOS':'MODO NOTA: ESCALA PENTATÓNICA DE '+SLOTS[currentSlot].name);
   renderReadouts(); renderPads();
+});
+ui.bChain.addEventListener('click',()=>{
+  if(!actx) return;
+  songMode=!songMode;
+  if(songMode){
+    writeMode=false; ui.bWrite.classList.remove('on');
+    selectMode=null; ui.bSound.classList.remove('on'); ui.bPat.classList.remove('on');
+    chainPos=0;
+    setMsg('CANCIÓN — TOQUE PATRONES PARA ENCADENAR · TOQUE UN TRAMO PARA QUITARLO',true);
+  }else{
+    flashMsg(chain.length?('CANCIÓN DE '+chain.length+' TRAMOS GUARDADA'):'MODO CANCIÓN CERRADO');
+  }
+  ui.bChain.classList.toggle('on',songMode);
+  renderRuler(); renderChainView(); renderReadouts(); renderPads();
 });
 ui.bRec.addEventListener('click',armMic);
 ui.bDown.addEventListener('click',()=>{ bpm=Math.max(40,bpm-4); saveSong(); renderReadouts(); });
@@ -937,11 +1045,12 @@ ui.resetBtn.addEventListener('click',async()=>{
     patterns[p][s]=INITIAL_PATTERNS[p][s].map(e=>({...e}));
   for(let i=0;i<16;i++) Object.assign(SLOTS[i],SLOTS_ORIG[i]);
   bpm=112; currentPat=0; currentSlot=8; padMode='kit'; writeMode=false; selectMode=null;
+  chain=INITIAL_CHAIN.slice(); songMode=false; chainPos=0;
   lastSemi=SLOTS.map(s=>s.type==='mel'?12:0);
-  ui.bWrite.classList.remove('on'); ui.bSound.classList.remove('on'); ui.bPat.classList.remove('on');
+  ui.bWrite.classList.remove('on'); ui.bSound.classList.remove('on'); ui.bPat.classList.remove('on'); ui.bChain.classList.remove('on');
   buildKit();
   flashMsg('ESTADO INICIAL RESTABLECIDO',true);
-  renderReadouts(); renderPads();
+  renderReadouts(); renderRuler(); renderChainView(); renderPads();
 });
 
 /* ═══════════ banda registradora (canvas) ═══════════ */
@@ -979,16 +1088,22 @@ function drawScope(){
 function raf(){
   if(actx){
     drawScope();
-    let advanced=false;
+    let advanced=false, prevPos=uiChainPos;
     while(stepQueue.length && stepQueue[0].time<=actx.currentTime){
-      uiStep=stepQueue.shift().step; advanced=true;
+      const e=stepQueue.shift(); uiStep=e.step; uiPat=e.pat; uiChainPos=e.cpos; advanced=true;
     }
     if(advanced && playing){
       ui.statusPos.textContent='PASO '+pad2(uiStep+1)+'/16';
-      tickEls.forEach((t,i)=>t.classList.toggle('now',i===uiStep));
-      if(!writeMode && !selectMode && padMode==='kit'){
+      renderRuler();
+      if(songMode){
+        padEls.forEach((p,i)=>p.classList.toggle('now',i===uiPat));
+        if(uiChainPos!==prevPos){
+          renderChainView();
+          ui.roPat.innerHTML=pad2(uiPat+1)+' <small>'+(uiChainPos+1)+'/'+chain.length+'</small>';
+        }
+      }else if(!writeMode && !selectMode && padMode==='kit'){
         padEls.forEach((p,i)=>p.classList.toggle('now',
-          patterns[currentPat][uiStep].some(e=>e.s===i)));
+          patterns[uiPat][uiStep].some(e=>e.s===i)));
       }
     }
   }
@@ -1008,14 +1123,14 @@ splash.addEventListener('pointerdown',()=>{
   buildKit();
   actx.resume();
   splash.remove();
-  fitScope(); renderReadouts(); renderPads();
+  fitScope(); renderReadouts(); renderRuler(); renderChainView(); renderPads();
   loadState().then(()=>{
     trigger(3,24,actx.currentTime+0.05);        // campana de calibración
-    renderReadouts(); renderPads();
+    renderReadouts(); renderRuler(); renderChainView(); renderPads();
   });
 });
 
-renderReadouts(); renderPads();
+renderReadouts(); renderRuler(); renderChainView(); renderPads();
 requestAnimationFrame(raf);
 
 /* ═══════════ instalación PWA ═══════════ */

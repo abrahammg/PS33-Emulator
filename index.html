@@ -4,6 +4,11 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="PS·33">
+<meta name="theme-color" content="#EAE7DE" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151713" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 
 <style>
   :root{
@@ -160,8 +165,10 @@
   }
   button:active{ transform:translate(1px,1px); box-shadow:1px 1px 0 var(--ink-faint); }
   button:focus-visible{ outline:2px solid var(--accent); outline-offset:1px; }
-  button .sym{ font-size:13px; font-weight:700; line-height:1; }
+  button .sym{ font-size:13px; font-weight:700; line-height:1; display:flex; align-items:center; justify-content:center; height:15px; }
+  button .sym svg{ width:16px; height:16px; display:block; }
   button .lbl{ font-size:8px; letter-spacing:1.5px; color:var(--ink-soft); }
+  .linkBtn svg{ width:10px; height:10px; vertical-align:-1px; margin-right:3px; }
   button.on{ background:var(--ink); color:var(--paper); }
   button.on .lbl{ color:var(--paper); opacity:.7; }
   button.arm{ background:var(--accent); border-color:var(--accent); color:var(--paper); }
@@ -242,7 +249,9 @@
     margin-top:10px; border:1px solid var(--accent); color:var(--accent);
     padding:10px 26px; font-size:11px; letter-spacing:2px;
   }
-  #splash .cross{ font-size:26px; color:var(--accent); }
+  #splash .cross{ color:var(--accent); }
+  #splash .cross svg{ width:30px; height:30px; display:block; }
+  .lgi{ width:9px; height:9px; vertical-align:-1px; }
 
   @media (prefers-reduced-motion: reduce){
     #recDot.on{ animation:none; }
@@ -311,7 +320,7 @@
     <div id="legend">
       <b>SIGNOS CONVENCIONALES</b> —
       <span class="a">●</span> paso ocupado ·
-      <span class="a">▣</span> selección ·
+      <span class="a"><svg class="lgi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><rect x="4" y="4" width="16" height="16"/></svg></span> selección ·
       <b>ESCRITURA</b>+pulsador fija el sonido en el paso ·
       <b>MICRÓFONO</b>+pulsador toma muestra de campo (mantener)
       <div id="scalebar">
@@ -319,14 +328,14 @@
       </div>
     </div>
     <div class="fops">
-      <button id="clearBtn" class="linkBtn">⌫ BORRAR PATRÓN</button>
-      <button id="resetBtn" class="linkBtn">⟲ ESTADO INICIAL</button>
+      <button id="clearBtn" class="linkBtn">BORRAR PATRÓN</button>
+      <button id="resetBtn" class="linkBtn">ESTADO INICIAL</button>
     </div>
   </footer>
 </div>
 
 <div id="splash">
-  <div class="cross">⌖</div>
+  <div class="cross"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="12" cy="12" r="6.5"/><path d="M12 1 V23 M1 12 H23"/><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"/></svg></div>
   <div class="big">PS·33</div>
   <div class="sub">REGISTRADOR DE MUESTRAS SONORAS<br>16 SONIDOS · 16 PASOS · 16 PATRONES<br>PATRONES DE DEMOSTRACIÓN 01–04 CARGADOS</div>
   <div class="go">TOCAR PARA CALIBRAR</div>
@@ -625,12 +634,12 @@ function startPlay(){
   playing=true; step=0; uiStep=-1; stepQueue.length=0;
   nextNoteTime=actx.currentTime+0.06;
   schedTimer=setInterval(schedule,25);
-  ui.bPlay.classList.add('on'); ui.bPlay.querySelector('.sym').textContent='■';
+  ui.bPlay.classList.add('on'); ui.bPlay.querySelector('.sym').innerHTML=ICON.stop;
   setMsg('EN MARCHA — PATRÓN '+pad2(currentPat+1));
 }
 function stopPlay(){
   playing=false; clearInterval(schedTimer); stepQueue.length=0; uiStep=-1;
-  ui.bPlay.classList.remove('on'); ui.bPlay.querySelector('.sym').textContent='▶';
+  ui.bPlay.classList.remove('on'); ui.bPlay.querySelector('.sym').innerHTML=ICON.play;
   ui.statusPos.textContent='PASO —/16';
   document.querySelectorAll('.tick.now').forEach(t=>t.classList.remove('now'));
   setMsg('APARATO EN REPOSO'); renderPads();
@@ -676,6 +685,23 @@ for(let i=0;i<16;i++){
   p.addEventListener('pointercancel',()=>padUp(i,p));
 }
 document.addEventListener('contextmenu',e=>e.preventDefault());
+
+/* ═══════════ iconografía (SVG en línea, sin depender de fuentes) ═══════════ */
+const S='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" stroke-linejoin="miter">';
+const ICON={
+  play:  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5 L19 12 L7 19 Z"/></svg>',
+  stop:  '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12"/></svg>',
+  write: S+'<path d="M4 20 L4 16 L15 5 L19 9 L8 20 Z"/><path d="M13 7 L17 11"/></svg>',
+  sound: S+'<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/></svg>',
+  pattern:S+'<path d="M9 4 V20 M15 4 V20 M4 9 H20 M4 15 H20"/></svg>',
+  note:  S+'<path d="M10 18 V6 L18 4 V15"/><ellipse cx="7.6" cy="18" rx="2.6" ry="2.1" fill="currentColor" stroke="none"/><ellipse cx="15.6" cy="15" rx="2.6" ry="2.1" fill="currentColor" stroke="none"/></svg>',
+  mic:   S+'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M6 11 v1 a6 6 0 0 0 12 0 v-1"/><path d="M12 18 V21 M8 21 H16"/></svg>',
+  minus: S+'<path d="M5 12 H19"/></svg>',
+  plus:  S+'<path d="M12 5 V19 M5 12 H19"/></svg>',
+  fs:    S+'<path d="M4 9 V4 H9 M15 4 H20 V9 M20 15 V20 H15 M9 20 H4 V15"/></svg>',
+};
+const ICON_MAP={bPlay:'play',bWrite:'write',bSound:'sound',bPat:'pattern',bMode:'note',bRec:'mic',bDown:'minus',bUp:'plus',bFs:'fs'};
+for(const id in ICON_MAP) ui[id].querySelector('.sym').innerHTML=ICON[ICON_MAP[id]];
 
 function renderReadouts(){
   ui.roMode.textContent = selectMode==='sound'?'SEL·SON' : selectMode==='pattern'?'SEL·PAT'
@@ -882,10 +908,10 @@ ui.clearBtn.addEventListener('click',()=>{
   if(!clearArmed){
     clearArmed=true; ui.clearBtn.classList.add('confirm');
     ui.clearBtn.textContent='¿CONFIRMAR BORRADO?';
-    clearTimer=setTimeout(()=>{clearArmed=false;ui.clearBtn.classList.remove('confirm');ui.clearBtn.textContent='⌫ BORRAR PATRÓN';},2500);
+    clearTimer=setTimeout(()=>{clearArmed=false;ui.clearBtn.classList.remove('confirm');ui.clearBtn.textContent='BORRAR PATRÓN';},2500);
   }else{
     clearTimeout(clearTimer); clearArmed=false;
-    ui.clearBtn.classList.remove('confirm'); ui.clearBtn.textContent='⌫ BORRAR PATRÓN';
+    ui.clearBtn.classList.remove('confirm'); ui.clearBtn.textContent='BORRAR PATRÓN';
     patterns[currentPat]=Array.from({length:16},()=>[]);
     saveSong();
     flashMsg('PATRÓN '+pad2(currentPat+1)+' BORRADO',true);
@@ -900,11 +926,11 @@ ui.resetBtn.addEventListener('click',async()=>{
   if(!resetArmed){
     resetArmed=true; ui.resetBtn.classList.add('confirm');
     ui.resetBtn.textContent='¿BORRAR SUS MUESTRAS Y PATRONES?';
-    resetTimer=setTimeout(()=>{resetArmed=false;ui.resetBtn.classList.remove('confirm');ui.resetBtn.textContent='⟲ ESTADO INICIAL';},2800);
+    resetTimer=setTimeout(()=>{resetArmed=false;ui.resetBtn.classList.remove('confirm');ui.resetBtn.textContent='ESTADO INICIAL';},2800);
     return;
   }
   clearTimeout(resetTimer); resetArmed=false;
-  ui.resetBtn.classList.remove('confirm'); ui.resetBtn.textContent='⟲ ESTADO INICIAL';
+  ui.resetBtn.classList.remove('confirm'); ui.resetBtn.textContent='ESTADO INICIAL';
   if(playing) stopPlay();
   try{ await idbClear(); }catch(e){}
   for(let p=0;p<16;p++) for(let s=0;s<16;s++)
@@ -991,4 +1017,11 @@ splash.addEventListener('pointerdown',()=>{
 
 renderReadouts(); renderPads();
 requestAnimationFrame(raf);
+
+/* ═══════════ instalación PWA ═══════════ */
+if('serviceWorker' in navigator && location.protocol.startsWith('http')){
+  window.addEventListener('load',()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
 </script>

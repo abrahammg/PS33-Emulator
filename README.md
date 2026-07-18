@@ -36,10 +36,14 @@ you tap "calibrate".
   only**; nothing is ever uploaded. The *⟲ ESTADO INICIAL* button (with a
   confirmation tap) wipes your data and restores the factory kit and demo
   patterns.
-- **Mobile-first** — sized for a phone screen, multi-touch pads, a fullscreen
-  toggle (*⛶ PLENA*), and web-app meta tags so "Add to Home Screen" on iOS
-  opens it like a native app. A dark "night cabinet" theme follows your system
-  preference.
+- **Mobile-first & installable (PWA)** — sized for a phone screen, multi-touch
+  pads, a fullscreen toggle (*PLENA*), and a web manifest + service worker so it
+  installs to the home screen and launches **standalone, with no browser chrome
+  or borders**. It also works offline once loaded. A dark "night cabinet" theme
+  follows your system preference.
+- **Font-independent icons** — every control glyph is an inline SVG, so the
+  interface renders identically on any server or device regardless of which
+  fonts are installed (no more missing-glyph boxes).
 
 ## Running it
 
@@ -54,10 +58,22 @@ Or serve `index.html` with anything else (nginx, Apache, `python3 -m
 http.server`, GitHub Pages…). There is no backend logic — the Node server just
 serves files.
 
-**One requirement to know about:** browsers only expose the microphone in a
-*secure context*. `http://localhost` qualifies; a deployment on a real domain
-needs **HTTPS** (put the server behind your usual TLS reverse proxy). Without
-HTTPS everything else still works — only field sampling is disabled.
+**One requirement to know about:** browsers only expose the microphone — and
+register the service worker for offline/installable use — in a *secure
+context*. `http://localhost` qualifies; a deployment on a real domain needs
+**HTTPS** (put the server behind your usual TLS reverse proxy). Without HTTPS
+everything else still works — only field sampling and PWA install are disabled.
+
+### Installing as an app
+
+Served over HTTPS (or on localhost), open it in the browser and use **Install**
+(Chrome/Edge/Android: address-bar install icon or menu → *Install app*; iOS
+Safari: *Share → Add to Home Screen*). It then launches full-screen with no
+browser UI.
+
+The app icons are generated, dependency-free, by `tools/gen-icons.js` — a
+framed cartographic cross-hair. Re-run `node tools/gen-icons.js` if you restyle
+the mark.
 
 ## Controls
 
